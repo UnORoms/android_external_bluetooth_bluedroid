@@ -34,6 +34,7 @@
 #include "bd.h"
 #include "btu.h"
 #include "bte.h"
+#include "bta_sys.h"
 #include "bta_api.h"
 #include "bt_utils.h"
 #include "bt_hci_bdroid.h"

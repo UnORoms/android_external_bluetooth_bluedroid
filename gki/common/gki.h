@@ -234,6 +234,8 @@ GKI_API extern UINT64 GKI_now_us(void);
 */
 GKI_API extern void    GKI_enable(void);
 GKI_API extern void    GKI_disable(void);
+GKI_API extern void    GKI_sched_lock(void);		
+GKI_API extern void    GKI_sched_unlock(void);
 
 /* Allocate (Free) memory from an OS
 */

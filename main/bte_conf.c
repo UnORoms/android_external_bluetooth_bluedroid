@@ -80,6 +80,21 @@ void bte_load_ble_conf(const char* path)
 }
 #endif
 
+
+BOOLEAN gps_enable = FALSE;
+int EnableGpsServerOption(char *p_conf_name, char *p_conf_value)
+{
+       gps_enable = (strcmp(p_conf_value, "true") == 0) ? TRUE : FALSE;
+       return 0;
+}
+char gUnixSocketPath[128] = {0};
+int GpsUnixSocketPathOption(char *p_conf_name, char *p_conf_value)
+{
+       strcpy(gUnixSocketPath, p_conf_value);
+       return 0;
+}
+
+
 // Parses the specified Device ID configuration file and registers the
 // Device ID records with SDP.
 void bte_load_did_conf(const char *p_path) {

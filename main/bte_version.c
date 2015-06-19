@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright (C) 2014 Google, Inc.
+ *  Copyright (C) 2001-2012 Broadcom Corporation
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -16,12 +16,8 @@
  *
  ******************************************************************************/
 
-#pragma once
+#include "bt_types.h"
 
-#include "base.h"
-
-bool hal_open(bt_callbacks_t *callbacks);
-void hal_close();
 const UINT8 bte_version_string[] = "BCM1200_PI_10.3.20.52";
 const UINT8 btif_version_string[] = "BDROID-PLUS-420-10_00.10";
 const UINT8 GPS_FM_patch_version_string[] = "AMPAK-Android-4.4-GPS-FM-1.0.2";

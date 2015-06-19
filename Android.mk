@@ -18,6 +18,9 @@ ifneq ($(BOARD_BLUETOOTH_BDROID_HCILP_INCLUDED),)
   bdroid_CFLAGS += -DHCILP_INCLUDED=$(BOARD_BLUETOOTH_BDROID_HCILP_INCLUDED)
 endif
 
+BLUEDROID_EXTRA_BPLUS_STATIC_LINKING := true
+BPLUS_FM_INCLUDED:= true
+#BLUDROID_INTERNAL:=true
 include $(call all-subdir-makefiles)
 
 # Cleanup our locals

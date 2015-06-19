@@ -1,6 +1,37 @@
 LOCAL_PATH := $(call my-dir)
 
 #
+# FM core lib
+#
+include $(CLEAR_VARS)
+LOCAL_MODULE := libbt-fmcore
+LOCAL_MODULE_CLASS :=  STATIC_LIBRARIES
+LOCAL_SRC_FILES := ../bta/fm/libbt-fmcore.a
+LOCAL_MODULE_SUFFIX := .a
+include $(BUILD_PREBUILT)
+
+#
+# FM rds lib
+#
+include $(CLEAR_VARS)
+LOCAL_MODULE := libbt-fmrds
+LOCAL_MODULE_CLASS :=  STATIC_LIBRARIES
+LOCAL_SRC_FILES := ../fmrds/libbt-fmrds.a
+LOCAL_MODULE_SUFFIX := .a
+include $(BUILD_PREBUILT)
+
+
+#
+# GPS 2076 lib
+#
+include $(CLEAR_VARS)
+LOCAL_MODULE := libbt-brcm_gps
+LOCAL_MODULE_CLASS :=  STATIC_LIBRARIES
+LOCAL_SRC_FILES := ../gps/libbt-brcm_gps.a
+LOCAL_MODULE_SUFFIX := .a
+include $(BUILD_PREBUILT)
+
+#
 # Bluetooth HW module
 #
 
@@ -19,6 +50,7 @@ LOCAL_SRC_FILES += \
 	bte_conf.c \
 	bte_init.c \
 	bte_logmsg.c \
+	bte_version.c \
 	bte_main.c
 
 # BTIF
@@ -61,6 +93,7 @@ LOCAL_SRC_FILES += \
         ../btif/src/btif_smp.c \
         ../btif/src/btif_sdp.c\
         ../btif/src/btif_rfcomm.c \
+        ../btif/src/btif_fm.c
 
 # callouts
 LOCAL_SRC_FILES += \
@@ -73,7 +106,8 @@ LOCAL_SRC_FILES += \
 	../btif/co/bta_hh_co.c \
 	../btif/co/bta_hl_co.c \
 	../btif/co/bta_pan_co.c \
-	../btif/co/bta_sys_co.c
+	../btif/co/bta_sys_co.c \
+        ../btif/co/bta_fm_co.c
 
 # sbc encoder
 LOCAL_SRC_FILES += \
@@ -149,8 +183,19 @@ LOCAL_STATIC_LIBRARIES := \
 	libbt-qcom_sbc_decoder \
 	libosi \
 	libtinyxml2 \
-	libbt-qcom_sbc_decoder
+	libbt-qcom_sbc_decoder \
+	libbt-brcm_gps
 
+#LOCAL_WHOLE_STATIC_LIBRARIES := libbt-brcm_gki libbt-brcm_stack libbt-brcm_bta
+
+ifeq ($(BPLUS_FM_INCLUDED),true)
+ifeq ($(BLUEDROID_EXTRA_BPLUS_STATIC_LINKING),true)
+    LOCAL_STATIC_LIBRARIES += libbt-fmrds libbt-fmcore
+else
+    LOCAL_SHARED_LIBRARIES += libbt-fmrds libbt-fmcore
+endif
+    LOCAL_CFLAGS += -DBPLUS_FM_INCLUDED
+endif
 LOCAL_MODULE := bluetooth.default
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_MODULE_TAGS := optional

@@ -190,6 +190,70 @@
 #define BTA_AV_INCLUDED TRUE
 #endif
 
+#ifndef BTA_AV_VDP_INCLUDED
+#define BTA_AV_VDP_INCLUDED FALSE
+#endif
+
+#ifndef BTA_AVK_INCLUDED
+#define BTA_AVK_INCLUDED FALSE
+#endif
+
+#ifndef BTA_PBS_INCLUDED
+#define BTA_PBS_INCLUDED FALSE
+#endif
+
+#ifndef BTA_PBC_INCLUDED
+#define BTA_PBC_INCLUDED FALSE
+#endif
+
+#ifndef BTA_FM_INCLUDED
+#define BTA_FM_INCLUDED TRUE
+#endif
+
+#ifndef BTA_FM_DEBUG
+#define BTA_FM_DEBUG FALSE
+#endif
+
+#ifndef BTA_FMTX_INCLUDED
+#define BTA_FMTX_INCLUDED FALSE
+#endif
+
+#ifndef BTA_FMTX_DEBUG
+#define BTA_FMTX_DEBUG FALSE
+#endif
+
+#ifndef BTA_FMTX_FMRX_SWITCH_WORKAROUND
+#define BTA_FMTX_FMRX_SWITCH_WORKAROUND FALSE
+#endif
+
+#ifndef BTA_FMTX_US_FCC_RULES
+#define BTA_FMTX_US_FCC_RULES FALSE
+#endif
+
+#ifndef BTA_HS_INCLUDED
+#define BTA_HS_INCLUDED FALSE
+#endif
+
+#ifndef BTA_MSE_INCLUDED
+#define BTA_MSE_INCLUDED FALSE
+#endif
+
+#ifndef BTA_MCE_INCLUDED
+#define BTA_MCE_INCLUDED FALSE
+#endif
+
+#ifndef BTA_PLAYBACK_INCLUDED
+#define BTA_PLAYBACK_INCLUDED FALSE
+#endif
+
+#ifndef BTA_SSR_INCLUDED
+#define BTA_SSR_INCLUDED FALSE
+#endif
+
+#ifndef BTA_JV_INCLUDED
+#define BTA_JV_INCLUDED FALSE
+#endif
+
 #ifndef BTA_GATT_INCLUDED
 #define BTA_GATT_INCLUDED TRUE
 #endif

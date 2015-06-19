@@ -101,6 +101,11 @@ enum
 enum
 {
     BTIF_CORE_CB_START = BTIF_SIG_CB_START(BTIF_CORE),
+    BTIF_CORE_BT_STATE_ON,
+    BTIF_CORE_BT_STATE_OFF,
+    BTIF_CORE_BT_RADIO_ON,
+    BTIF_CORE_BT_RADIO_OFF,
+
     /* add here */
 
     BTIF_DM_CB_START = BTIF_SIG_CB_START(BTIF_DM),
@@ -186,6 +191,7 @@ void btif_data_profile_register(int value);
  */
 void btif_enable_bluetooth_evt(tBTA_STATUS status, BD_ADDR local_bd);
 void btif_disable_bluetooth_evt(void);
+void btif_check_send_bt_off(void);
 void btif_adapter_properties_evt(bt_status_t status, uint32_t num_props, bt_property_t *p_props);
 void btif_remote_properties_evt(bt_status_t status, bt_bdaddr_t *remote_addr,
                                    uint32_t num_props, bt_property_t *p_props);

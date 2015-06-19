@@ -29,6 +29,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include "bt_target.h"
+
 #include <hardware/bluetooth.h>
 #include <hardware/bt_hf.h>
 #include <hardware/bt_hf_client.h>
@@ -42,6 +45,8 @@
 #include <hardware/bt_gatt.h>
 #include <hardware/bt_rc.h>
 #include <hardware/wipower.h>
+
+#include <hardware/bt_fm.h>
 
 #define LOG_NDDEBUG 0
 #define LOG_TAG "bluedroid"
@@ -151,6 +156,10 @@ extern const btsmp_interface_t *btif_smp_get_interface(void);
 extern const btgap_interface_t *btif_gap_get_interface(void);
 #endif
 
+#if (defined(BPLUS_FM_INCLUDED) && (BPLUS_FM_INCLUDED == TRUE))
+extern const btfm_interface_t *btif_fm_get_interface();
+#endif
+
 /************************************************************************************
 **  Functions
 ************************************************************************************/
@@ -223,6 +232,26 @@ static int disable(void)
         return BT_STATUS_NOT_READY;
 
     return btif_disable_bluetooth();
+}
+
+static int enable_radio( void )
+{
+    ALOGI("enable");
+
+    /* sanity check */
+    if (interface_ready() == FALSE)
+        return BT_STATUS_NOT_READY;
+
+    return btif_enable_radio();
+}
+
+static int disable_radio(void)
+{
+    /* sanity check */
+    if (interface_ready() == FALSE)
+        return BT_STATUS_NOT_READY;
+
+    return btif_disable_radio();
 }
 
 static void cleanup( void )
@@ -453,6 +482,23 @@ static const void* get_profile_interface (const char *profile_id)
 
     return NULL;
 }
+
+static const void* get_fm_interface ()
+{
+    ALOGI("get_fm_interface " );
+
+    /* sanity check */
+    if (interface_ready() == FALSE)
+        return NULL;
+
+#if (defined(BPLUS_FM_INCLUDED) && (BPLUS_FM_INCLUDED == TRUE))
+        return btif_fm_get_interface();
+#else
+        ALOGE("bplus FM is not included ");
+        return NULL;
+#endif
+}
+
 #if TEST_APP_INTERFACE == TRUE
 static const void* get_testapp_interface(int test_app_profile)
 {
@@ -478,6 +524,14 @@ static const void* get_testapp_interface(int test_app_profile)
             return NULL;
     }
     return NULL;
+
+//FM Bits
+//#if (defined(BPLUS_FM_INCLUDED) && (BPLUS_FM_INCLUDED == TRUE))
+//        return btif_fm_get_interface();
+//#else
+//        ALOGE("bplus FM is not included ");
+//        return NULL;
+//#endif
 }
 
 #endif //TEST_APP_INTERFACE
@@ -734,6 +788,8 @@ static const bt_interface_t bluetoothInterface = {
     disable,
     cleanup,
     ssrcleanup,
+    enable_radio,
+    disable_radio,
     get_adapter_properties,
     get_adapter_property,
     set_adapter_property,
@@ -759,6 +815,7 @@ static const bt_interface_t bluetoothInterface = {
     NULL,
 #endif
     config_hci_snoop_log,
+    get_fm_interface,
     set_os_callouts,
     read_energy_info,
 #if TEST_APP_INTERFACE == TRUE

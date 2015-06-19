@@ -1754,7 +1754,6 @@ static void btif_dm_search_services_evt(UINT16 event, char *p_param)
                 bt_property_t prop;
                 bt_bdaddr_t bd_addr;
                 char temp[256];
-                bt_status_t ret;
 
                 bta_gatt_convert_uuid16_to_uuid128(uuid.uu,p_data->disc_ble_res.service.uu.uuid16);
 
@@ -1774,10 +1773,6 @@ static void btif_dm_search_services_evt(UINT16 event, char *p_param)
                 prop.type = BT_PROPERTY_UUIDS;
                 prop.val = uuid.uu;
                 prop.len = MAX_UUID_SIZE;
-
-                /* Also write this to the NVRAM */
-                ret = btif_storage_set_remote_device_property(&bd_addr, &prop);
-                ASSERTC(ret == BT_STATUS_SUCCESS, "storing remote services failed", ret);
 
                 /* Send the event to the BTIF */
                 HAL_CBACK(bt_hal_cbacks, remote_device_properties_cb,
@@ -1880,6 +1875,98 @@ static void btif_dm_remote_service_record_evt(UINT16 event, char *p_param)
         }
         break;
     }
+}
+/*******************************************************************************
+**
+** Function         btif_dm_enable_bt_services
+**
+** Description      Send the adpater properties and enables the bt service when bt is enable
+**
+** Returns          void
+**
+*******************************************************************************/
+void btif_dm_enable_bt_services()
+{
+    tBTA_SERVICE_MASK service_mask;
+    uint32_t i = 0;
+    bt_bdaddr_t bd_addr;
+    BD_NAME bdname;
+    bt_status_t status;
+    bt_property_t prop;
+    prop.type = BT_PROPERTY_BDNAME;
+    prop.len = sizeof(BD_NAME);
+    prop.val = (void*)bdname;
+
+    status = btif_storage_get_adapter_property(&prop);
+    /* Storage does not have a name yet.
+    ** Use the default name and write it to the chip
+    */
+    if (status != BT_STATUS_SUCCESS)
+    {
+        BTA_DmSetDeviceName((char *)BTM_DEF_LOCAL_NAME);
+        /* Hmmm...Should we store this too??? */
+    }
+    else
+    {
+        /* A name exists in the storage. Make this the device name */
+        BTA_DmSetDeviceName((char*)prop.val);
+    }
+
+    //Added for PBAPC: register static SDP records
+    //btif_sdp_add_records();
+
+    /* for each of the enabled services in the mask, trigger the profile
+     * enable */
+    service_mask = btif_get_enabled_services_mask();
+    for (i=0; i <= BTA_MAX_SERVICE_ID; i++)
+    {
+        if (service_mask &
+            (tBTA_SERVICE_MASK)(BTA_SERVICE_ID_TO_SERVICE_MASK(i)))
+        {
+            btif_in_execute_service_request(i, TRUE);
+        }
+    }
+    /* clear control blocks */
+    memset(&pairing_cb, 0, sizeof(btif_dm_pairing_cb_t));
+
+    /* This function will also trigger the adapter_properties_cb
+    ** and bonded_devices_info_cb
+    */
+    btif_storage_load_bonded_devices();
+
+    btif_storage_load_autopair_device_list();
+
+}
+
+/*******************************************************************************
+**
+** Function         btif_dm_disable_bt_services
+**
+** Description      Stop bt services when bt is disabled
+**
+** Returns          void
+**
+*******************************************************************************/
+void btif_dm_disable_bt_services()
+{
+    tBTA_SERVICE_MASK service_mask;
+    uint32_t i;
+
+    /* for each of the enabled services in the mask, trigger the profile
+     * disable */
+    service_mask = btif_get_enabled_services_mask();
+    for (i=0; i <= BTA_MAX_SERVICE_ID; i++)
+    {
+        if (service_mask &
+            (tBTA_SERVICE_MASK)(BTA_SERVICE_ID_TO_SERVICE_MASK(i)))
+        {
+            btif_in_execute_service_request(i, FALSE);
+        }
+    }
+
+    //Added for PBAPC: unregister static SDP records
+    //btif_sdp_remove_records();
+
 }
 
 /*******************************************************************************
@@ -2037,6 +2124,7 @@ static void btif_dm_upstreams_evt(UINT16 event, char* p_param)
                        btif_dm_inquiry_in_progress = FALSE;
                 }
             }
+			btif_check_send_bt_off();
         }break;
 
         case BTA_DM_LINK_UP_EVT:
@@ -3650,6 +3738,8 @@ void btif_dm_on_disable()
         bdcpy(bd_addr.address, pairing_cb.bd_addr);
         btif_dm_cancel_bond(&bd_addr);
     }
+    //Luke: stop discovery  when bluetooth is disabled
+    btif_dm_cancel_discovery();
 }
 
 /*******************************************************************************

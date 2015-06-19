@@ -306,6 +306,9 @@
 #define HCI_VSC_MULTI_AV_HANDLE         0x0AAA
 #define HCI_VSC_BURST_MODE_HANDLE       0x0BBB
 
+/* Vendor specific commands for FM */
+#define HCI_BRCM_FM_OPCODE                  (0x0015 | HCI_GRP_VENDOR_SPECIFIC)
+
 /* BLE HCI */
 #define HCI_GRP_BLE_CMDS                (0x08 << 10)
 /* Commands of BLE Controller setup and configuration */
@@ -2820,6 +2823,10 @@ Commands of HCI_GRP_VENDOR_SPECIFIC group for WIDCOMM SW LM Simulator
 
 #endif
 
+
+/* Broadcom Vendor Specific Event sub-codes */
+
+#define HCI_BRCM_VSE_SUBCODE_FM_INTERRUPT                           0x08
 
 /* AMP VSE events
 */

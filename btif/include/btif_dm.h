@@ -35,6 +35,10 @@ void bte_dm_evt(tBTA_DM_SEC_EVT event, tBTA_DM_SEC *p_data);
  */
 void btif_dm_on_disable(void);
 
+void btif_dm_enable_bt_services();
+
+void btif_dm_disable_bt_services();
+
 /**
  * Callout for handling io_capabilities request
  */

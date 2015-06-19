@@ -54,6 +54,7 @@
 #include "btif_config.h"
 #include "btif_sock_util.h"
 #include "btif_gatt_multi_adv_util.h"
+#include "bta_gps_api.h"
 /************************************************************************************
 **  Constants & Macros
 ************************************************************************************/
@@ -99,7 +100,8 @@ typedef enum {
     BTIF_CORE_STATE_INITIALIZED,
     BTIF_CORE_STATE_ENABLING,
     BTIF_CORE_STATE_ENABLED,
-    BTIF_CORE_STATE_DISABLING
+    BTIF_CORE_STATE_RADIO_ENABLED,
+    BTIF_CORE_STATE_DISABLING,
 } btif_core_state_t;
 
 /************************************************************************************
@@ -113,6 +115,11 @@ static UINT32 btif_task_stack[(BTIF_TASK_STACK_SIZE + 3) / 4];
 /* holds main adapter state */
 static btif_core_state_t btif_core_state = BTIF_CORE_STATE_DISABLED;
 
+/* holds whther it is radio request (enable_radio/disable_radio) */
+static BOOLEAN btif_core_is_radio_req = FALSE;
+
+/* holds the count of radios that are enabled */
+static int btif_core_radio_ref_count = 0;
 static int btif_shutdown_pending = 0;
 static tBTA_SERVICE_MASK btif_enabled_services = 0;
 static int btif_data_profile_registered = 0;
@@ -154,6 +161,7 @@ void btif_dm_execute_service_request(UINT16 event, char *p_param);
 void btif_dm_load_local_oob(void);
 #endif
 void bte_main_config_hci_logging(BOOLEAN enable, BOOLEAN bt_disabled);
+void btif_handle_bluetooth_enable_evt(tBTA_STATUS status);
 
 /************************************************************************************
 **  Functions
@@ -271,6 +279,21 @@ int btif_is_enabled(void)
     return ((!btif_is_dut_mode()) && (btif_core_state == BTIF_CORE_STATE_ENABLED));
 }
 
+/*******************************************************************************
+**
+** Function         btif_is_enabled
+**
+** Description      checks if main adapter is fully enabled
+**
+** Returns          1 if fully enabled, otherwize 0
+**
+*******************************************************************************/
+
+int btif_is_radio_enabled(void)
+{
+    return ((!btif_is_dut_mode()) && ((btif_core_state == BTIF_CORE_STATE_ENABLED)
+    ||(btif_core_state == BTIF_CORE_STATE_RADIO_ENABLED)));
+}
 /*******************************************************************************
 **
 ** Function         btif_task
@@ -497,6 +520,9 @@ bt_status_t btif_init_bluetooth()
     UINT8 status;
     btif_config_init();
     bte_main_boot_entry();
+    
+    /* Print out GPS_FM patch version */
+    ALOGD("Version: %s \n", GPS_FM_patch_version_string);
 
     /* As part of the init, fetch the local BD ADDR */
     memset(&btif_local_bd_addr, 0, sizeof(bt_bdaddr_t));
@@ -532,6 +558,27 @@ static bt_status_t btif_associate_evt(void)
     return BT_STATUS_SUCCESS;
 }
 
+static void btif_in_generic_evt(UINT16 event, char * params)
+{
+     switch(event) {
+        case BTIF_CORE_BT_RADIO_ON:
+            btif_handle_bluetooth_enable_evt(BTA_SUCCESS);
+            break;
+        case BTIF_CORE_BT_STATE_ON:
+            /* enable bt services  */
+            btif_dm_enable_bt_services();
+            btif_handle_bluetooth_enable_evt(BTA_SUCCESS);
+            break;
+        case BTIF_CORE_BT_RADIO_OFF:
+            HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_RADIO_OFF);
+            btif_core_is_radio_req = FALSE;
+            break;
+        case BTIF_CORE_BT_STATE_OFF:
+            btif_dm_disable_bt_services();
+            btif_check_send_bt_off();
+            break;
+     }
+}
 
 /*******************************************************************************
 **
@@ -547,25 +594,152 @@ bt_status_t btif_enable_bluetooth(void)
 {
     BTIF_TRACE_DEBUG("BTIF ENABLE BLUETOOTH");
 
-    if (btif_core_state != BTIF_CORE_STATE_DISABLED &&
-        btif_core_state != BTIF_CORE_STATE_INITIALIZED)
-    {
-        ALOGD("not disabled\n");
-        return BT_STATUS_DONE;
+    if (0 == btif_core_radio_ref_count){
+
+        if (btif_core_state != BTIF_CORE_STATE_DISABLED  &&
+            btif_core_state != BTIF_CORE_STATE_INITIALIZED)
+        {
+            ALOGD("not disabled\n");
+            return BT_STATUS_DONE;
+        }
+
+        btif_core_state = BTIF_CORE_STATE_ENABLING;
+	
+	bt_disabled = FALSE;
+    	ssr_triggered = FALSE;
+
+    	init_slot_lock(&mutex_bt_disable);
+
+        /* Create the GKI tasks and run them */
+        bte_main_enable();
+        btif_core_radio_ref_count++;
     }
-
-    btif_core_state = BTIF_CORE_STATE_ENABLING;
-
-    bt_disabled = FALSE;
-    ssr_triggered = FALSE;
-
-    init_slot_lock(&mutex_bt_disable);
-    /* Create the GKI tasks and run them */
-    bte_main_enable();
+    else
+    {
+        btif_core_radio_ref_count++;
+        /*btif core/chip is already enabled so just do other initialisation according to event*/
+        btif_transfer_context(btif_in_generic_evt, BTIF_CORE_BT_STATE_ON, NULL, 0, NULL);
+    }
 
     return BT_STATUS_SUCCESS;
 }
 
+/*******************************************************************************
+**
+** Function         btif_enable_radio
+**
+** Description    Performs chip power on and kickstarts OS scheduler
+**
+** Returns          bt_status_t
+**
+*******************************************************************************/
+
+bt_status_t btif_enable_radio(void)
+{
+    BTIF_TRACE_DEBUG("BTIF ENABLE RADIO");
+
+    btif_core_is_radio_req = TRUE;
+
+    if (0 == btif_core_radio_ref_count)
+    {
+        if (btif_core_state != BTIF_CORE_STATE_DISABLED)
+        {
+            ALOGD("not disabled\n");
+            return BT_STATUS_DONE;
+        }
+
+        btif_core_state = BTIF_CORE_STATE_ENABLING;
+
+    	bt_disabled = FALSE;
+    	ssr_triggered = FALSE;
+
+    	init_slot_lock(&mutex_bt_disable);
+
+        /* Create the GKI tasks and run them */
+        bte_main_enable();
+        btif_core_radio_ref_count++;
+    }
+    else
+    {
+        btif_core_radio_ref_count++;
+
+        /*btif core/chip is already enabled so just do other initialisation according to event*/
+        btif_transfer_context(btif_in_generic_evt, BTIF_CORE_BT_RADIO_ON, NULL, 0, NULL);
+    }
+
+    return BT_STATUS_SUCCESS;
+}
+
+/*******************************************************************************
+**
+** Function         btif_handle_bluetooth_enable_evt
+**
+** Description      Handles the module initialization for Bt/radio enabling
+**
+** Returns          void
+**
+*******************************************************************************/
+
+void btif_handle_bluetooth_enable_evt(tBTA_STATUS status)
+{
+    /* callback to HAL */
+    if (status == BTA_SUCCESS)
+    {
+        if (!btif_core_is_radio_req)
+        {
+
+            /* initialize a2dp service */
+            //btif_av_init();
+
+            /* init rfcomm & l2cap api */
+            btif_sock_init();
+
+            /* init pan */
+            btif_pan_init();
+
+            /* load did configuration */
+            bte_load_did_conf(BTE_DID_CONF_FILE);
+
+#ifdef BTIF_DM_OOB_TEST
+            btif_dm_load_local_oob();
+#endif
+            /* now fully enabled, update state */
+            btif_core_state = BTIF_CORE_STATE_ENABLED;
+            HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_STATE_ON);
+        }
+        else
+        {
+            /* If the chip is turned on go to BTIF_CORE_STATE_RADIO_ENABLED else
+               stay in prev state  BTIF_CORE_STATE_ENABLED(bt/radio both enabled)*/
+            if (btif_core_state == BTIF_CORE_STATE_ENABLING)
+                btif_core_state = BTIF_CORE_STATE_RADIO_ENABLED;
+
+            HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_RADIO_ON);
+            btif_core_is_radio_req =FALSE;
+        }
+    }
+    else
+    {
+        if (!btif_core_is_radio_req)
+        {
+            /* cleanup rfcomm & l2cap api */
+            btif_sock_cleanup();
+
+            btif_pan_cleanup();
+
+            /* we failed to enable, reset state */
+            btif_core_state = BTIF_CORE_STATE_DISABLED;
+            HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_STATE_OFF);
+        }
+        else
+        {
+            /* we failed to enable, reset state */
+            btif_core_state = BTIF_CORE_STATE_DISABLED;
+            HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_RADIO_OFF);
+            btif_core_is_radio_req =FALSE;
+        }
+    }
+}
 
 /*******************************************************************************
 **
@@ -582,6 +756,11 @@ void btif_enable_bluetooth_evt(tBTA_STATUS status, BD_ADDR local_bd)
 {
     bt_bdaddr_t bd_addr;
     bdstr_t bdstr;
+
+	BTA_GpsEnable(NULL);
+    /* enable bt services if it is not radio req */
+    if (!btif_core_is_radio_req)
+        btif_dm_enable_bt_services();
 
     bdcpy(bd_addr.address, local_bd);
     BTIF_TRACE_DEBUG("%s: status %d, local bd [%s]", __FUNCTION__, status,
@@ -629,41 +808,7 @@ void btif_enable_bluetooth_evt(tBTA_STATUS status, BD_ADDR local_bd)
 #endif
     /* add passing up bd address as well ? */
 
-    /* callback to HAL */
-    if (status == BTA_SUCCESS)
-    {
-        /* don't initialize a2dp service */
-        //btif_av_init(); // we need av_init only from init_sink, init_src
-
-        /* init rfcomm & l2cap api */
-        btif_sock_init();
-
-        /* init pan */
-        btif_pan_init();
-
-        /* load did configuration */
-        bte_load_did_conf(BTE_DID_CONF_FILE);
-
-#ifdef BTIF_DM_OOB_TEST
-        btif_dm_load_local_oob();
-#endif
-        /* now fully enabled, update state */
-        btif_core_state = BTIF_CORE_STATE_ENABLED;
-
-        HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_STATE_ON);
-    }
-    else
-    {
-        /* cleanup rfcomm & l2cap api */
-        btif_sock_cleanup();
-
-        btif_pan_cleanup();
-
-        /* we failed to enable, reset state */
-        btif_core_state = BTIF_CORE_STATE_DISABLED;
-
-        HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_STATE_OFF);
-    }
+    btif_handle_bluetooth_enable_evt(status);
 }
 
 /*******************************************************************************
@@ -681,40 +826,143 @@ bt_status_t btif_disable_bluetooth(void)
 {
     tBTA_STATUS status;
 
-    if (!btif_is_enabled())
+    btif_core_radio_ref_count--;
+    if (0 == btif_core_radio_ref_count)
     {
-        BTIF_TRACE_ERROR("btif_disable_bluetooth : not yet enabled");
-        return BT_STATUS_NOT_READY;
-    }
+        if (!btif_is_enabled())
+        {
+            BTIF_TRACE_ERROR("btif_disable_bluetooth : not yet enabled");
+            return BT_STATUS_NOT_READY;
+        }
+		BTA_GpsDisable();
 
-    BTIF_TRACE_DEBUG("BTIF DISABLE BLUETOOTH");
+        BTIF_TRACE_DEBUG("BTIF DISABLE BLUETOOTH");
 
-    btif_dm_on_disable();
-    btif_core_state = BTIF_CORE_STATE_DISABLING;
 
-    /* cleanup rfcomm & l2cap api */
-    btif_sock_cleanup();
+        btif_dm_on_disable();
+        btif_core_state = BTIF_CORE_STATE_DISABLING;
 
-    btif_pan_cleanup();
+        /* cleanup rfcomm & l2cap api */
+        btif_sock_cleanup();
 
-    status = BTA_DisableBluetooth();
+        btif_pan_cleanup();
 
-    btif_config_flush();
+        status = BTA_DisableBluetooth();
 
-    /* clear the adv instances on bt turn off */
+        btif_config_flush();
+
+	/* clear the adv instances on bt turn off */
 #if (BLE_INCLUDED == TRUE)
-    btif_gatt_adv_inst_cleanup();
+        btif_gatt_adv_inst_cleanup();
 #endif
 
-    if (status != BTA_SUCCESS)
-    {
-        BTIF_TRACE_ERROR("disable bt failed (%d)", status);
+        if (status != BTA_SUCCESS)
+        {
+            BTIF_TRACE_ERROR("disable bt failed (%d)", status);
 
-        /* reset the original state to allow attempting disable again */
-        btif_core_state = BTIF_CORE_STATE_ENABLED;
+            /* reset the original state to allow attempting disable again */
+            btif_core_state = BTIF_CORE_STATE_ENABLED;
 
-        return BT_STATUS_FAIL;
+            return BT_STATUS_FAIL;
+        }
     }
+    else
+    {
+        /*btif core/chip should not be turned off as ref is not 0
+        so just handle closure for bt modules*/
+        BTIF_TRACE_DEBUG("BTIF DISABLE BLUETOOTH MODULES");
+
+        btif_dm_on_disable();
+        btif_core_state = BTIF_CORE_STATE_RADIO_ENABLED;
+
+
+        /* cleanup rfcomm & l2cap api */
+        btif_sock_cleanup();
+
+        btif_pan_cleanup();
+
+        btif_transfer_context(btif_in_generic_evt, BTIF_CORE_BT_STATE_OFF, NULL, 0, NULL);
+    }
+
+    return BT_STATUS_SUCCESS;
+}
+/*******************************************************************************
+**
+** Function         btif_check_send_bt_off
+**
+** Description     If bt is disabled when radio is still on , the bt off event to be sent to app.
+**
+** Returns          void
+**
+*******************************************************************************/
+void btif_check_send_bt_off()
+{
+    BTIF_TRACE_DEBUG("btif_check_send_bt_off btif_core_state= (%d),ACL links = (%d)",
+        btif_core_state, BTM_GetNumAclLinks());
+
+    // BT OFF event is sent only when all the ACL links are down and
+    // BT is OFF, but Radio is enabled (FM/GPS/NFC).
+
+    if (btif_core_state == BTIF_CORE_STATE_RADIO_ENABLED
+        && (BTM_GetNumAclLinks() == 0) )
+    {
+        HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_STATE_OFF);
+    }
+}
+/*******************************************************************************
+**
+** Function         btif_disable_radio
+**
+** Description      Inititates shutdown of combo chip if no other radio/bt is turned on.
+**
+** Returns          void
+**
+*******************************************************************************/
+
+bt_status_t btif_disable_radio(void)
+{
+    tBTA_STATUS status;
+
+    btif_core_is_radio_req = TRUE;
+    btif_core_radio_ref_count--;
+
+    if (0 == btif_core_radio_ref_count){
+
+        if (!btif_is_radio_enabled())
+        {
+            BTIF_TRACE_ERROR("btif_disable_radio : not yet enabled");
+            return BT_STATUS_NOT_READY;
+        }
+
+        BTIF_TRACE_DEBUG("BTIF DISABLE RADIO");
+		BTA_GpsDisable();
+
+        btif_core_state = BTIF_CORE_STATE_DISABLING;
+        status = BTA_DisableBluetooth();
+
+        /* clear the adv instances on bt turn off */
+#if (BLE_INCLUDED == TRUE)
+        btif_gatt_adv_inst_cleanup();
+#endif
+
+        if (status != BTA_SUCCESS)
+        {
+            BTIF_TRACE_ERROR("disable radio failed (%d)", status);
+
+            /* reset the original state to allow attempting disable again */
+            btif_core_state = BTIF_CORE_STATE_RADIO_ENABLED;
+
+            return BT_STATUS_FAIL;
+        }
+    }
+    else
+    {
+        /* btif core/chip should not be turned off as ref is
+           not 0 so just handle closure for radio modules if any*/
+        btif_transfer_context(btif_in_generic_evt,
+            BTIF_CORE_BT_RADIO_OFF, NULL, 0, NULL);
+    }
+
     return BT_STATUS_SUCCESS;
 }
 
@@ -738,6 +986,10 @@ void btif_disable_bluetooth_evt(void)
         BTIF_TRACE_DEBUG("%s SSR triggered,Ignore EVT",__FUNCTION__);
         return;
     }
+
+    if (!btif_core_is_radio_req)
+        btif_dm_disable_bt_services();
+
 #if (defined(HCILP_INCLUDED) && HCILP_INCLUDED == TRUE)
     bte_main_enable_lpm(FALSE);
 #endif
@@ -747,20 +999,31 @@ void btif_disable_bluetooth_evt(void)
 #endif
 
      lock_slot(&mutex_bt_disable);
-     if(bt_disabled == FALSE)
-     {
-         BTIF_TRACE_ERROR("btif_task: btif_disable_bluetooth_evt");
-         bte_main_disable();
-         btif_core_state = BTIF_CORE_STATE_DISABLED;
-         HAL_CBACK(bt_hal_cbacks,adapter_state_changed_cb,BT_STATE_OFF);
-     }
-     unlock_slot(&mutex_bt_disable);
+    if (!btif_core_radio_ref_count)
+        bte_main_disable();
+
+    if (!btif_core_is_radio_req)
+    {
+        /* now fully disabled, update state */
+        btif_core_state = BTIF_CORE_STATE_DISABLED;
+        /* callback to HAL */
+        HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_STATE_OFF);
+    }
+    else
+    {
+        /* now fully disabled, update state */
+        btif_core_state = BTIF_CORE_STATE_DISABLED;
+        HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_RADIO_OFF);
+        btif_core_is_radio_req = FALSE;
+    }
+
 
     if (btif_shutdown_pending)
     {
         BTIF_TRACE_DEBUG("%s: calling btif_shutdown_bluetooth", __FUNCTION__);
         btif_shutdown_bluetooth();
     }
+     unlock_slot(&mutex_bt_disable);
 }
 
 
@@ -787,7 +1050,7 @@ bt_status_t btif_shutdown_bluetooth(void)
         return BT_STATUS_NOT_READY;
     }
 
-    if (btif_is_enabled())
+    if (btif_is_radio_enabled())
     {
         BTIF_TRACE_WARNING("shutdown while still enabled, initiate disable");
 
@@ -810,6 +1073,10 @@ bt_status_t btif_shutdown_bluetooth(void)
             // Direct call from cleanup()@bluetooth.c
             // bring down HCI/Vendor lib
             bte_main_disable();
+            // clear up state
+            btif_core_radio_ref_count--;
+            btif_core_is_radio_req = FALSE;
+
             btif_core_state = BTIF_CORE_STATE_DISABLED;
             HAL_CBACK(bt_hal_cbacks, adapter_state_changed_cb, BT_STATE_OFF);
         }

@@ -40,3 +40,41 @@ LOCAL_SHARED_LIBRARIES += libcutils   \
 LOCAL_MULTILIB := 32
 
 include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES:= gpst.c
+
+LOCAL_C_INCLUDES :=
+
+LOCAL_MODULE_TAGS := eng
+
+LOCAL_MODULE:= gpst
+
+LOCAL_LDLIBS += -lpthread -ldl -llog -lreadline
+
+LOCAL_SHARED_LIBRARIES += libcutils   \
+                          libutils    
+
+include $(BUILD_EXECUTABLE)
+
+
+#include $(CLEAR_VARS)
+
+#LOCAL_SRC_FILES:= ../../bta/gps/bta_gps_tcp_serv.c
+
+#LOCAL_CFLAGS += -DDBUG_TCP_STANDALONE -DBUILDCFG $(bdroid_CFLAGS)
+
+#LOCAL_C_INCLUDES += $(LOCAL_PATH)/../../include $(LOCAL_PATH)/../../gki/ulinux $(LOCAL_PATH)/../../stack/include \
+#		    $(LOCAL_PATH)/../../../../../device/samsung/maguro/bluetooth/
+
+#LOCAL_MODULE_TAGS := eng
+
+#LOCAL_MODULE:= gpst_s
+
+#LOCAL_LDLIBS += -lpthread -ldl -llog -lreadline
+
+#LOCAL_SHARED_LIBRARIES += libcutils   \
+                          libutils    
+
+#include $(BUILD_EXECUTABLE)

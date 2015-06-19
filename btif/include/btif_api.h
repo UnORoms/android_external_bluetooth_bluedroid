@@ -85,6 +85,30 @@ void btif_ssr_cleanup(void);
 
 /*******************************************************************************
 **
+** Function         btif_enable_radio
+**
+** Description    Performs chip power on and kickstarts OS scheduler
+**
+** Returns          bt_status_t
+**
+*******************************************************************************/
+
+bt_status_t btif_enable_radio(void);
+
+/*******************************************************************************
+**
+** Function         btif_disable_radio
+**
+** Description      Inititates shutdown of combo chip if no other radio/bt is turned on.
+**
+** Returns          bt_status_t
+**
+*******************************************************************************/
+
+bt_status_t btif_disable_radio(void);
+
+/*******************************************************************************
+**
 ** Function         btif_shutdown_bluetooth
 **
 ** Description      Finalizes BT scheduler shutdown and terminates BTIF
