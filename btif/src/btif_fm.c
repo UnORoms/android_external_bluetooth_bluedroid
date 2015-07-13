@@ -158,7 +158,7 @@ static tBTIF_FM_Data btif_fm_data;
 
     static int btif_fm_tune(int freq);
     static int btif_fm_set_audio_path(int audioPath);
-    static int btif_fm_set_volume(int volume);
+    static int btif_fm_set_volume(UINT16 volume);
 
 
     /*******************************************************************************
@@ -764,15 +764,24 @@ static int btif_fm_set_audio_mode(int audioMode)
     return BTA_SUCCESS;
 }
 
+
+void btif_fm_cb (tBTM_VSC_CMPL *p_params)
+{
+    APPL_TRACE_DEBUG( "btif_fm_cb" );
+}
+
+
 /** Set audio path. */
 static int btif_fm_set_audio_path(int audioPath)
 {
+
     CHECK_BTFM_INIT();
     APPL_TRACE_DEBUG(
         "btif_fm_set_audio_path(requested audioPath: %d) , current_bta_path: %d",
                        audioPath, btif_fm_data.current_bta_path );
 
     BTA_FmConfigAudioPath((tBTA_FM_AUDIO_PATH)audioPath);
+
     return BTA_SUCCESS;
 }
 
@@ -834,14 +843,70 @@ static int btif_fm_config_signal_notification(int time)
     return BTA_SUCCESS;
 }
 
-
 /** Set fm volume. */
-static int btif_fm_set_volume(int volume)
+static int btif_fm_set_volume(UINT16 volume)
 {
-    CHECK_BTFM_INIT();
 
-    APPL_TRACE_DEBUG( "btif_fm_volume_control(volume: %d) on current_bta_path: %d",
-                       volume, btif_fm_data.current_bta_path );
+    UINT8           param[30], *p;
+    tBTM_STATUS     st = BTM_WRONG_MODE;
+    UINT16          newVolume;
+
+    CHECK_BTFM_INIT();
+    APPL_TRACE_DEBUG(
+        "btif_fm_set_volume(volume: %d)", volume );
+
+    newVolume = volume / 2;
+
+    APPL_TRACE_DEBUG(
+            "btif_fm_set_volume(corrected volume: %d)", newVolume );
+
+    p = param;
+    memset(param, 0, 30);
+
+    UINT8_TO_STREAM(p, 0x05);
+    UINT8_TO_STREAM(p, 0xc0);
+    UINT8_TO_STREAM(p, 0x41);
+    UINT8_TO_STREAM(p, 0x0f);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0x20);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0x00);
+
+    st = BTM_VendorSpecificCommand (0xFC0A, 9,
+                                            param, btif_fm_cb);
+
+    p = param;
+    memset(param, 0, 30);
+
+    UINT8_TO_STREAM(p, 0x05);
+    UINT8_TO_STREAM(p, 0xe4);
+    UINT8_TO_STREAM(p, 0x41);
+    UINT8_TO_STREAM(p, 0x0f);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0x00);
+
+    st = BTM_VendorSpecificCommand (0xFC0A, 9, param, btif_fm_cb);
+
+    p = param;
+    memset(param, 0, 30);
+
+    UINT8_TO_STREAM(p, 0x05);
+    UINT8_TO_STREAM(p, 0xe0);
+    UINT8_TO_STREAM(p, 0x41);
+    UINT8_TO_STREAM(p, 0x0f);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0xff & newVolume);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0x00);
+    UINT8_TO_STREAM(p, 0x00);
+
+    st = BTM_VendorSpecificCommand (0xFC0A, 9, param, btif_fm_cb);
+
+    APPL_TRACE_DEBUG( "btif_fm_set_volume : result %d", st );
 
     BTA_FmVolumeControl(volume);
 
