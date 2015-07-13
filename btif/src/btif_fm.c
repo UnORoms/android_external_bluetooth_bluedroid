@@ -626,6 +626,7 @@ static void btif_fm_cback(tBTA_FM_EVT event, tBTA_FM *p_data)
     ASSERTC(status == BT_STATUS_SUCCESS, "Context transfer failed!", status);
 }
 
+static int btif_fm_set_volume_alt(UINT16 volume);
 
 /**
  * Opens the interface and provides the callback routines
@@ -635,6 +636,7 @@ static int btif_fm_init (btfm_callbacks_t* callbacks )
 {
     BTIF_TRACE_EVENT("%s", __func__);
     bt_fm_callbacks = callbacks;
+    btif_fm_set_volume(0);
     return BTA_SUCCESS;
 }
 
@@ -843,22 +845,13 @@ static int btif_fm_config_signal_notification(int time)
     return BTA_SUCCESS;
 }
 
-/** Set fm volume. */
-static int btif_fm_set_volume(UINT16 volume)
+static int btif_fm_set_volume_alt(UINT16 volume)
 {
-
     UINT8           param[30], *p;
     tBTM_STATUS     st = BTM_WRONG_MODE;
-    UINT16          newVolume;
-
-    CHECK_BTFM_INIT();
-    APPL_TRACE_DEBUG(
-        "btif_fm_set_volume(volume: %d)", volume );
-
-    newVolume = volume / 2;
 
     APPL_TRACE_DEBUG(
-            "btif_fm_set_volume(corrected volume: %d)", newVolume );
+            "btif_fm_set_volume_alt(corrected volume: %d)", volume );
 
     p = param;
     memset(param, 0, 30);
@@ -899,14 +892,26 @@ static int btif_fm_set_volume(UINT16 volume)
     UINT8_TO_STREAM(p, 0x41);
     UINT8_TO_STREAM(p, 0x0f);
     UINT8_TO_STREAM(p, 0x00);
-    UINT8_TO_STREAM(p, 0xff & newVolume);
+    UINT8_TO_STREAM(p, 0xff & volume);
     UINT8_TO_STREAM(p, 0x00);
     UINT8_TO_STREAM(p, 0x00);
     UINT8_TO_STREAM(p, 0x00);
 
     st = BTM_VendorSpecificCommand (0xFC0A, 9, param, btif_fm_cb);
 
-    APPL_TRACE_DEBUG( "btif_fm_set_volume : result %d", st );
+    APPL_TRACE_DEBUG( "btif_fm_set_volume_alt : result %d", st );
+
+    return st;
+}
+/** Set fm volume. */
+static int btif_fm_set_volume(UINT16 volume)
+{
+
+    CHECK_BTFM_INIT();
+    APPL_TRACE_DEBUG(
+        "btif_fm_set_volume(volume: %d)", volume );
+
+    btif_fm_set_volume_alt(volume / 2);
 
     BTA_FmVolumeControl(volume);
 
